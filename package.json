@@ -7,16 +7,23 @@
     "dev": "vercel dev",
     "type-check": "tsc --noEmit"
   },
-  "keywords": ["slack", "github", "bot", "lgtm"],
+  "keywords": [
+    "slack",
+    "github",
+    "bot",
+    "lgtm"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@octokit/rest": "^20.0.2",
     "@vercel/postgres": "^0.5.1",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
+    "@types/pg": "^8.16.0",
     "@vercel/node": "^3.0.12",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
