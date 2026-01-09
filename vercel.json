@@ -1,9 +1,6 @@
 {
   "functions": {
     "api/**/*.ts": {
-      "includeFiles": "lib/**"
-    },
-    "api/events.ts": {
       "includeFiles": "lib/**",
       "maxDuration": 10
     }
