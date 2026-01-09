@@ -1,4 +1,4 @@
-import { createPool } from '@vercel/postgres';
+import { createClient } from '@vercel/postgres';
 
 export interface UserToken {
   slack_user_id: string;
@@ -8,16 +8,15 @@ export interface UserToken {
   updated_at: Date;
 }
 
-// Create a pooled connection
-const pool = createPool({
-  connectionString: process.env.POSTGRES_URL,
-});
+// Create client - this uses the non-pooled connection
+const getClient = () => createClient();
 
 // Initialize database table
 export async function initializeDatabase() {
+  const client = getClient();
   try {
-    const sql = await pool.sql;
-    await sql`
+    await client.connect();
+    await client.sql`
       CREATE TABLE IF NOT EXISTS user_tokens (
         slack_user_id VARCHAR(255) PRIMARY KEY,
         github_token TEXT NOT NULL,
@@ -30,6 +29,8 @@ export async function initializeDatabase() {
   } catch (error: any) {
     console.error('Failed to initialize database:', error.message);
     throw error;
+  } finally {
+    await client.end();
   }
 }
 
@@ -39,9 +40,10 @@ export async function storeUserToken(
   githubToken: string,
   githubUsername: string
 ): Promise<void> {
+  const client = getClient();
   try {
-    const sql = await pool.sql;
-    await sql`
+    await client.connect();
+    await client.sql`
       INSERT INTO user_tokens (slack_user_id, github_token, github_username, updated_at)
       VALUES (${slackUserId}, ${githubToken}, ${githubUsername}, CURRENT_TIMESTAMP)
       ON CONFLICT (slack_user_id)
@@ -53,14 +55,17 @@ export async function storeUserToken(
   } catch (error: any) {
     console.error('Failed to store user token:', error.message);
     throw error;
+  } finally {
+    await client.end();
   }
 }
 
 // Get user's GitHub token
 export async function getUserToken(slackUserId: string): Promise<string | null> {
+  const client = getClient();
   try {
-    const sql = await pool.sql;
-    const result = await sql`
+    await client.connect();
+    const result = await client.sql`
       SELECT github_token
       FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
@@ -74,14 +79,17 @@ export async function getUserToken(slackUserId: string): Promise<string | null> 
   } catch (error: any) {
     console.error('Failed to get user token:', error.message);
     return null;
+  } finally {
+    await client.end();
   }
 }
 
 // Get user's GitHub username
 export async function getUserInfo(slackUserId: string): Promise<{ token: string; username: string } | null> {
+  const client = getClient();
   try {
-    const sql = await pool.sql;
-    const result = await sql`
+    await client.connect();
+    const result = await client.sql`
       SELECT github_token, github_username
       FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
@@ -98,19 +106,24 @@ export async function getUserInfo(slackUserId: string): Promise<{ token: string;
   } catch (error: any) {
     console.error('Failed to get user info:', error.message);
     return null;
+  } finally {
+    await client.end();
   }
 }
 
 // Delete user's token (for disconnecting)
 export async function deleteUserToken(slackUserId: string): Promise<void> {
+  const client = getClient();
   try {
-    const sql = await pool.sql;
-    await sql`
+    await client.connect();
+    await client.sql`
       DELETE FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
     `;
   } catch (error: any) {
     console.error('Failed to delete user token:', error.message);
     throw error;
+  } finally {
+    await client.end();
   }
 }
