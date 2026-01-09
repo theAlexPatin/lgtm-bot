@@ -136,6 +136,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Get raw body for signature verification
   const rawBody = await getRawBody(req);
+  const body = JSON.parse(rawBody);
+
+  // Handle URL verification challenge BEFORE signature verification
+  // Slack's challenge doesn't always include proper signatures
+  if (body.type === 'url_verification') {
+    console.log('Responding to URL verification challenge');
+    return res.status(200).json({ challenge: body.challenge });
+  }
+
   const timestamp = req.headers['x-slack-request-timestamp'] as string;
   const signature = req.headers['x-slack-signature'] as string;
 
@@ -151,13 +160,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Timestamp:', timestamp);
     console.error('Signature:', signature);
     return res.status(401).json({ error: 'Invalid signature' });
-  }
-
-  const body = JSON.parse(rawBody);
-
-  // Handle URL verification challenge
-  if (body.type === 'url_verification') {
-    return res.status(200).json({ challenge: body.challenge });
   }
 
   // Handle events
