@@ -4,8 +4,8 @@ import crypto from 'crypto';
 import { getUserInfo, initializeDatabase } from '../lib/db';
 import { getRawBody, verifySlackRequest } from '../lib/slack';
 
-// Extract PR number from any URL containing owner/repo/number pattern
-function extractPRNumber(text: string, owner: string, repo: string): number | null {
+// Extract all PR numbers from any URLs containing owner/repo/number pattern
+function extractPRNumbers(text: string, owner: string, repo: string): number[] {
   // Slack formats links as <URL|text> or just <URL>
   // Extract all URLs from Slack format first
   const slackLinkPattern = /<(https?:\/\/[^|>]+)(?:\|[^>]+)?>/g;
@@ -26,14 +26,22 @@ function extractPRNumber(text: string, owner: string, repo: string): number | nu
   const escapedRepo = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`\\/${escapedOwner}\\/${escapedRepo}\\/(?:pull\\/)?(\\d+)`, 'i');
 
+  const prNumbers: number[] = [];
+  const seen = new Set<number>();
+
   for (const url of allUrls) {
     const prMatch = url.match(pattern);
     if (prMatch) {
-      return parseInt(prMatch[1], 10);
+      const prNumber = parseInt(prMatch[1], 10);
+      // Avoid duplicates
+      if (!seen.has(prNumber)) {
+        seen.add(prNumber);
+        prNumbers.push(prNumber);
+      }
     }
   }
 
-  return null;
+  return prNumbers;
 }
 
 // Fetch message content from Slack
@@ -250,27 +258,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      // Extract PR number from the message
-      const prNumber = extractPRNumber(messageText, githubOwner, githubRepo);
+      // Extract all PR numbers from the message
+      const prNumbers = extractPRNumbers(messageText, githubOwner, githubRepo);
 
-      if (!prNumber) {
-        console.log('No PR link found in message:', messageText);
+      if (prNumbers.length === 0) {
+        console.log('No PR links found in message:', messageText);
         return;
       }
 
-      console.log(`Found PR #${prNumber}, approving as ${userInfo.username}...`);
+      console.log(`Found ${prNumbers.length} PR(s): ${prNumbers.join(', ')}, approving as ${userInfo.username}...`);
 
-      // Approve the PR using the user's token
+      // Approve all PRs using the user's token
       const octokit = new Octokit({ auth: userInfo.token });
 
-      await octokit.pulls.createReview({
-        owner: githubOwner,
-        repo: githubRepo,
-        pull_number: prNumber,
-        event: 'APPROVE',
-      });
+      const approvalResults = [];
+      for (const prNumber of prNumbers) {
+        try {
+          await octokit.pulls.createReview({
+            owner: githubOwner,
+            repo: githubRepo,
+            pull_number: prNumber,
+            event: 'APPROVE',
+          });
 
-      console.log(`✅ PR #${prNumber} approved by ${userInfo.username} (Slack user: ${event.user})`);
+          console.log(`✅ PR #${prNumber} approved by ${userInfo.username} (Slack user: ${event.user})`);
+          approvalResults.push({ prNumber, status: 'success' });
+        } catch (prError: any) {
+          console.error(`Failed to approve PR #${prNumber}:`, prError.message);
+          approvalResults.push({ prNumber, status: 'failed', error: prError.message });
+        }
+      }
+
+      // Log summary
+      const successCount = approvalResults.filter(r => r.status === 'success').length;
+      const failureCount = approvalResults.filter(r => r.status === 'failed').length;
+      console.log(`Approval summary: ${successCount} succeeded, ${failureCount} failed`);
 
       // Send success response
       return res.status(200).json({ ok: true });
