@@ -237,95 +237,97 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`✅ Received ${triggerEmoji} reaction from user ${event.user} in channel ${event.item.channel}`);
 
-    // Process the reaction synchronously
-    try {
-      // Initialize database
-      await initializeDatabase();
+    // Respond to Slack immediately to avoid timeout
+    res.status(200).json({ ok: true });
 
-      // Get user's GitHub token
-      const userInfo = await getUserInfo(event.user);
+    // Process the reaction asynchronously (fire and forget)
+    // Note: This will continue running even after the response is sent
+    (async () => {
+      try {
+        // Initialize database
+        await initializeDatabase();
 
-      if (!userInfo) {
-        const appName = process.env.APP_NAME || 'lgtm';
-        console.log(`User ${event.user} has not connected their GitHub account`);
-        await sendDM(
-          event.user,
-          `⚠️ You need to connect your GitHub account first! Use \`/${appName} connect\` to link your account.`,
+        // Get user's GitHub token
+        const userInfo = await getUserInfo(event.user);
+
+        if (!userInfo) {
+          const appName = process.env.APP_NAME || 'lgtm';
+          console.log(`User ${event.user} has not connected their GitHub account`);
+          await sendDM(
+            event.user,
+            `⚠️ You need to connect your GitHub account first! Use \`/${appName} connect\` to link your account.`,
+            botToken
+          );
+          return;
+        }
+
+        // Fetch the message that was reacted to
+        const messageText = await getMessage(
+          event.item.channel,
+          event.item.ts,
           botToken
         );
-        return;
-      }
 
-      // Fetch the message that was reacted to
-      const messageText = await getMessage(
-        event.item.channel,
-        event.item.ts,
-        botToken
-      );
+        if (!messageText) {
+          console.log('Could not fetch message text');
+          return;
+        }
 
-      if (!messageText) {
-        console.log('Could not fetch message text');
-        return;
-      }
+        // Extract all PR information from the message
+        const prs = extractPRs(messageText);
 
-      // Extract all PR information from the message
-      const prs = extractPRs(messageText);
+        if (prs.length === 0) {
+          console.log('No PR links found in message:', messageText);
+          return;
+        }
 
-      if (prs.length === 0) {
-        console.log('No PR links found in message:', messageText);
-        return;
-      }
+        const prSummary = prs.map(pr => `${pr.owner}/${pr.repo}#${pr.prNumber}`).join(', ');
+        console.log(`Found ${prs.length} PR(s): ${prSummary}, approving as ${userInfo.username}...`);
 
-      const prSummary = prs.map(pr => `${pr.owner}/${pr.repo}#${pr.prNumber}`).join(', ');
-      console.log(`Found ${prs.length} PR(s): ${prSummary}, approving as ${userInfo.username}...`);
+        // Approve all PRs using the user's token
+        const octokit = new Octokit({ auth: userInfo.token });
 
-      // Approve all PRs using the user's token
-      const octokit = new Octokit({ auth: userInfo.token });
+        const approvalResults = [];
+        for (const pr of prs) {
+          try {
+            await octokit.pulls.createReview({
+              owner: pr.owner,
+              repo: pr.repo,
+              pull_number: pr.prNumber,
+              event: 'APPROVE',
+            });
 
-      const approvalResults = [];
-      for (const pr of prs) {
+            console.log(`✅ ${pr.owner}/${pr.repo}#${pr.prNumber} approved by ${userInfo.username} (Slack user: ${event.user})`);
+            approvalResults.push({ pr, status: 'success' });
+          } catch (prError: any) {
+            console.error(`Failed to approve ${pr.owner}/${pr.repo}#${pr.prNumber}:`, prError.message);
+            approvalResults.push({ pr, status: 'failed', error: prError.message });
+          }
+        }
+
+        // Log summary
+        const successCount = approvalResults.filter(r => r.status === 'success').length;
+        const failureCount = approvalResults.filter(r => r.status === 'failed').length;
+        console.log(`Approval summary: ${successCount} succeeded, ${failureCount} failed`);
+      } catch (error: any) {
+        console.error('Failed to approve PR:', error.message);
+        console.error('Error stack:', error.stack);
+
+        // Try to notify the user of the error
         try {
-          await octokit.pulls.createReview({
-            owner: pr.owner,
-            repo: pr.repo,
-            pull_number: pr.prNumber,
-            event: 'APPROVE',
-          });
-
-          console.log(`✅ ${pr.owner}/${pr.repo}#${pr.prNumber} approved by ${userInfo.username} (Slack user: ${event.user})`);
-          approvalResults.push({ pr, status: 'success' });
-        } catch (prError: any) {
-          console.error(`Failed to approve ${pr.owner}/${pr.repo}#${pr.prNumber}:`, prError.message);
-          approvalResults.push({ pr, status: 'failed', error: prError.message });
+          const appName = process.env.APP_NAME || 'lgtm';
+          await sendDM(
+            event.user,
+            `❌ Failed to approve PR: ${error.message}. Your GitHub token might be invalid or expired. Try using \`/${appName} connect\` again.`,
+            botToken
+          );
+        } catch (dmError) {
+          console.error('Failed to send error DM:', dmError);
         }
       }
+    })();
 
-      // Log summary
-      const successCount = approvalResults.filter(r => r.status === 'success').length;
-      const failureCount = approvalResults.filter(r => r.status === 'failed').length;
-      console.log(`Approval summary: ${successCount} succeeded, ${failureCount} failed`);
-
-      // Send success response
-      return res.status(200).json({ ok: true });
-    } catch (error: any) {
-      console.error('Failed to approve PR:', error.message);
-      console.error('Error stack:', error.stack);
-
-      // Try to notify the user of the error
-      try {
-        const appName = process.env.APP_NAME || 'lgtm';
-        await sendDM(
-          event.user,
-          `❌ Failed to approve PR: ${error.message}. Your GitHub token might be invalid or expired. Try using \`/${appName} connect\` again.`,
-          botToken
-        );
-      } catch (dmError) {
-        console.error('Failed to send error DM:', dmError);
-      }
-
-      // Send response even on error
-      return res.status(200).json({ ok: true });
-    }
+    return;
   }
 
   // Default response for other event types
