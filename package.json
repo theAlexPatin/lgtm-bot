@@ -4,9 +4,7 @@
   "description": "Slack bot for approving GitHub PRs with /lgtm command",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch api/lgtm.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "dev": "vercel dev",
     "type-check": "tsc --noEmit"
   },
   "keywords": ["slack", "github", "bot", "lgtm"],
