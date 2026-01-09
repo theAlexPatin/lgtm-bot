@@ -63,7 +63,7 @@ async function getMessage(
       }),
     });
 
-    const data = await response.json();
+    const data = await response.json() as any;
 
     if (!data.ok) {
       console.error('Failed to fetch message:', data.error);
@@ -92,7 +92,7 @@ async function sendDM(userId: string, message: string, botToken: string): Promis
       }),
     });
 
-    const openData = await openResponse.json();
+    const openData = await openResponse.json() as any;
 
     if (!openData.ok) {
       console.error('Failed to open DM:', openData.error);

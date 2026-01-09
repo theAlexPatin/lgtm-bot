@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     });
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = await tokenResponse.json() as any;
 
     if (tokenData.error || !tokenData.access_token) {
       console.error('GitHub OAuth error:', tokenData.error_description);
