@@ -136,7 +136,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Get raw body for signature verification
   const rawBody = await getRawBody(req);
-  const body = JSON.parse(rawBody);
+
+  // Parse body - could be JSON or form-encoded
+  let body: any;
+  try {
+    body = JSON.parse(rawBody);
+  } catch (e) {
+    // If JSON parsing fails, try to parse as URL-encoded form data
+    const params = new URLSearchParams(rawBody);
+    const payload = params.get('payload');
+    if (payload) {
+      body = JSON.parse(payload);
+    } else {
+      console.error('Failed to parse request body:', rawBody.substring(0, 100));
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
+  }
 
   // Handle URL verification challenge BEFORE signature verification
   // Slack's challenge doesn't always include proper signatures
