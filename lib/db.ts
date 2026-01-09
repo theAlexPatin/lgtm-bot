@@ -1,4 +1,4 @@
-import { createClient } from '@vercel/postgres';
+import { sql } from '@vercel/postgres';
 
 export interface UserToken {
   slack_user_id: string;
@@ -8,31 +8,11 @@ export interface UserToken {
   updated_at: Date;
 }
 
-// Create client - this uses the non-pooled connection
-// Try different connection string env vars in order of preference
-const getClient = () => {
-  const connectionString =
-    process.env.POSTGRES_URL_NON_POOLING ||
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error('No database connection string found. Please set POSTGRES_URL or DATABASE_URL environment variable.');
-  }
-
-  return createClient({ connectionString });
-};
-
 // Initialize database table
 export async function initializeDatabase() {
-  const client = getClient();
-  let connected = false;
   try {
-    console.log('Connecting to database...');
-    await client.connect();
-    connected = true;
-    console.log('Connected, creating table if not exists...');
-    await client.sql`
+    console.log('Creating table if not exists...');
+    await sql`
       CREATE TABLE IF NOT EXISTS user_tokens (
         slack_user_id VARCHAR(255) PRIMARY KEY,
         github_token TEXT NOT NULL,
@@ -45,12 +25,6 @@ export async function initializeDatabase() {
   } catch (error: any) {
     console.error('Failed to initialize database:', error.message);
     throw error;
-  } finally {
-    if (connected) {
-      console.log('Closing database connection...');
-      await client.end();
-      console.log('Database connection closed');
-    }
   }
 }
 
@@ -60,14 +34,9 @@ export async function storeUserToken(
   githubToken: string,
   githubUsername: string
 ): Promise<void> {
-  const client = getClient();
-  let connected = false;
   try {
-    console.log(`Connecting to database to store token for ${slackUserId}...`);
-    await client.connect();
-    connected = true;
-    console.log('Connected, storing token...');
-    await client.sql`
+    console.log(`Storing token for ${slackUserId}...`);
+    await sql`
       INSERT INTO user_tokens (slack_user_id, github_token, github_username, updated_at)
       VALUES (${slackUserId}, ${githubToken}, ${githubUsername}, CURRENT_TIMESTAMP)
       ON CONFLICT (slack_user_id)
@@ -80,21 +49,13 @@ export async function storeUserToken(
   } catch (error: any) {
     console.error('Failed to store user token:', error.message);
     throw error;
-  } finally {
-    if (connected) {
-      console.log('Closing database connection...');
-      await client.end();
-      console.log('Database connection closed');
-    }
   }
 }
 
 // Get user's GitHub token
 export async function getUserToken(slackUserId: string): Promise<string | null> {
-  const client = getClient();
   try {
-    await client.connect();
-    const result = await client.sql`
+    const result = await sql`
       SELECT github_token
       FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
@@ -108,17 +69,13 @@ export async function getUserToken(slackUserId: string): Promise<string | null> 
   } catch (error: any) {
     console.error('Failed to get user token:', error.message);
     return null;
-  } finally {
-    await client.end();
   }
 }
 
 // Get user's GitHub username
 export async function getUserInfo(slackUserId: string): Promise<{ token: string; username: string } | null> {
-  const client = getClient();
   try {
-    await client.connect();
-    const result = await client.sql`
+    const result = await sql`
       SELECT github_token, github_username
       FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
@@ -135,24 +92,18 @@ export async function getUserInfo(slackUserId: string): Promise<{ token: string;
   } catch (error: any) {
     console.error('Failed to get user info:', error.message);
     return null;
-  } finally {
-    await client.end();
   }
 }
 
 // Delete user's token (for disconnecting)
 export async function deleteUserToken(slackUserId: string): Promise<void> {
-  const client = getClient();
   try {
-    await client.connect();
-    await client.sql`
+    await sql`
       DELETE FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
     `;
   } catch (error: any) {
     console.error('Failed to delete user token:', error.message);
     throw error;
-  } finally {
-    await client.end();
   }
 }
