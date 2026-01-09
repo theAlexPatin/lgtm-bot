@@ -8,7 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const signingSecret = process.env.SLACK_SIGNING_SECRET;
   const githubClientId = process.env.GITHUB_CLIENT_ID;
-  const baseUrl = process.env.VERCEL_URL || process.env.BASE_URL;
+  const baseUrl = process.env.BASE_URL || process.env.VERCEL_URL;
 
   if (!signingSecret || !githubClientId || !baseUrl) {
     console.error('Missing environment variables');
