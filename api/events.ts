@@ -144,12 +144,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e) {
     // If JSON parsing fails, try to parse as URL-encoded form data
     const params = new URLSearchParams(rawBody);
+
+    // Check if it's a nested payload or direct form data
     const payload = params.get('payload');
     if (payload) {
       body = JSON.parse(payload);
     } else {
-      console.error('Failed to parse request body:', rawBody.substring(0, 100));
-      return res.status(400).json({ error: 'Invalid request body' });
+      // Direct form data (like challenge requests)
+      body = {};
+      params.forEach((value, key) => {
+        body[key] = value;
+      });
     }
   }
 
