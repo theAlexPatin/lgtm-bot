@@ -4,40 +4,33 @@ import crypto from 'crypto';
 import { getUserInfo, initializeDatabase } from '../lib/db';
 import { getRawBody, verifySlackRequest } from '../lib/slack';
 
-// Extract PR number from GitHub URL
-function extractGitHubPRNumber(url: string): number | null {
-  // Match: https://github.com/owner/repo/pull/123
-  const githubMatch = url.match(/github\.com\/[\w-]+\/[\w-]+\/pull\/(\d+)/);
-  if (githubMatch) {
-    return parseInt(githubMatch[1], 10);
-  }
-  return null;
-}
+// Extract PR number from any URL containing owner/repo/number pattern
+function extractPRNumber(text: string, owner: string, repo: string): number | null {
+  // Slack formats links as <URL|text> or just <URL>
+  // Extract all URLs from Slack format first
+  const slackLinkPattern = /<(https?:\/\/[^|>]+)(?:\|[^>]+)?>/g;
+  const slackLinks = [...text.matchAll(slackLinkPattern)].map(match => match[1]);
 
-// Extract PR number from Graphite URL
-function extractGraphitePRNumber(url: string): number | null {
-  // Graphite URLs can be in formats like:
-  // - https://app.graphite.dev/github/pr/owner/repo/123
-  // - https://app.graphite.dev/github/pr/owner/repo/123/details
-  const graphiteMatch = url.match(/graphite\.dev\/github\/pr\/[\w-]+\/[\w-]+\/(\d+)/);
-  if (graphiteMatch) {
-    return parseInt(graphiteMatch[1], 10);
-  }
-  return null;
-}
+  // Also look for plain URLs
+  const plainUrls = text.match(/https?:\/\/[^\s<>]+/g) || [];
 
-// Extract PR number from any supported link
-function extractPRNumber(text: string): number | null {
-  // Look for GitHub URLs
-  const githubUrlMatch = text.match(/https?:\/\/github\.com\/[\w-]+\/[\w-]+\/pull\/\d+/);
-  if (githubUrlMatch) {
-    return extractGitHubPRNumber(githubUrlMatch[0]);
-  }
+  // Combine both types of URLs
+  const allUrls = [...slackLinks, ...plainUrls];
 
-  // Look for Graphite URLs
-  const graphiteUrlMatch = text.match(/https?:\/\/app\.graphite\.dev\/github\/pr\/[\w-]+\/[\w-]+\/\d+[^\s]*/);
-  if (graphiteUrlMatch) {
-    return extractGraphitePRNumber(graphiteUrlMatch[0]);
+  // Look for URLs containing the specific owner/repo pattern
+  // This covers:
+  // - GitHub: https://github.com/owner/repo/pull/123
+  // - Graphite: https://app.graphite.com/github/pr/owner/repo/123
+  // - Any other service with similar pattern
+  const escapedOwner = owner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedRepo = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`\\/${escapedOwner}\\/${escapedRepo}\\/(?:pull\\/)?(\\d+)`, 'i');
+
+  for (const url of allUrls) {
+    const prMatch = url.match(pattern);
+    if (prMatch) {
+      return parseInt(prMatch[1], 10);
+    }
   }
 
   return null;
@@ -258,7 +251,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Extract PR number from the message
-      const prNumber = extractPRNumber(messageText);
+      const prNumber = extractPRNumber(messageText, githubOwner, githubRepo);
 
       if (!prNumber) {
         console.log('No PR link found in message:', messageText);
