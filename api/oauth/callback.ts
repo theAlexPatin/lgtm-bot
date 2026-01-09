@@ -64,12 +64,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Initialize database and store token
     console.log('Initializing database...');
     await initializeDatabase();
-    console.log('Storing user token...');
+    console.log('Database initialized, storing user token...');
     await storeUserToken(slackUserId, accessToken, user.login);
-    console.log('Token stored successfully');
+    console.log(`✅ Successfully linked GitHub account @${user.login} to Slack user ${slackUserId}`);
 
     // Return success page
-    return res.status(200).send(`
+    console.log('Sending success response...');
+    const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -132,7 +133,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           </div>
         </body>
       </html>
-    `);
+    `;
+
+    res.status(200).send(html);
+    console.log('Success response sent');
+    return;
   } catch (error: any) {
     console.error('OAuth callback error:', error);
     console.error('Error message:', error.message);

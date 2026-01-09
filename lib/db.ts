@@ -26,8 +26,12 @@ const getClient = () => {
 // Initialize database table
 export async function initializeDatabase() {
   const client = getClient();
+  let connected = false;
   try {
+    console.log('Connecting to database...');
     await client.connect();
+    connected = true;
+    console.log('Connected, creating table if not exists...');
     await client.sql`
       CREATE TABLE IF NOT EXISTS user_tokens (
         slack_user_id VARCHAR(255) PRIMARY KEY,
@@ -37,12 +41,16 @@ export async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    console.log('Database initialized successfully');
+    console.log('Database table ready');
   } catch (error: any) {
     console.error('Failed to initialize database:', error.message);
     throw error;
   } finally {
-    await client.end();
+    if (connected) {
+      console.log('Closing database connection...');
+      await client.end();
+      console.log('Database connection closed');
+    }
   }
 }
 
@@ -53,8 +61,12 @@ export async function storeUserToken(
   githubUsername: string
 ): Promise<void> {
   const client = getClient();
+  let connected = false;
   try {
+    console.log(`Connecting to database to store token for ${slackUserId}...`);
     await client.connect();
+    connected = true;
+    console.log('Connected, storing token...');
     await client.sql`
       INSERT INTO user_tokens (slack_user_id, github_token, github_username, updated_at)
       VALUES (${slackUserId}, ${githubToken}, ${githubUsername}, CURRENT_TIMESTAMP)
@@ -64,11 +76,16 @@ export async function storeUserToken(
         github_username = ${githubUsername},
         updated_at = CURRENT_TIMESTAMP
     `;
+    console.log(`Token stored for ${slackUserId}`);
   } catch (error: any) {
     console.error('Failed to store user token:', error.message);
     throw error;
   } finally {
-    await client.end();
+    if (connected) {
+      console.log('Closing database connection...');
+      await client.end();
+      console.log('Database connection closed');
+    }
   }
 }
 

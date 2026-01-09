@@ -36,11 +36,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const data = parseBody(rawBody);
   const userId = data.user_id;
 
+  console.log(`🔗 User ${userId} initiated GitHub account connection`);
+
   // Generate OAuth URL
   const state = Buffer.from(JSON.stringify({ slack_user_id: userId })).toString('base64');
   const redirectUri = `https://${baseUrl}/api/oauth/callback`;
 
   const githubOAuthUrl = `https://github.com/login/oauth/authorize?client_id=${githubClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=repo`;
+
+  console.log(`Generated OAuth URL for user ${userId}`);
 
   // Respond to Slack with instructions
   return res.status(200).json({
