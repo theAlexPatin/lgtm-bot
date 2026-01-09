@@ -15,10 +15,12 @@ A Slack bot that automatically approves GitHub pull requests when you react with
 
 ## How It Works
 
-1. Connect your GitHub account using `/connect` command (one-time setup)
+1. Connect your GitHub account using `/<app_name> connect` command (one-time setup)
 2. When someone posts a PR link in a monitored Slack channel
 3. React with ✅ emoji
 4. The bot approves the PR on GitHub using **your** GitHub account
+
+**Note**: Replace `<app_name>` with your configured `APP_NAME` (default: `lgtm`). So the command would be `/lgtm connect` by default.
 
 Supported link formats:
 - GitHub: `https://github.com/owner/repo/pull/123`
@@ -29,7 +31,7 @@ Supported link formats:
 ### 1. Install Dependencies
 
 ```bash
-npm install
+yarn install
 ```
 
 ### 2. Create GitHub OAuth App
@@ -70,10 +72,12 @@ npm install
 8. Go to "Slash Commands" in the sidebar
 9. Click "Create New Command"
 10. Set the following:
-    - Command: `/connect`
+    - Command: `/<your-app-name> connect` (e.g., `/lgtm connect`)
     - Request URL: `https://your-vercel-app.vercel.app/api/connect` (update after deploying)
     - Short Description: "Connect your GitHub account"
 11. Save the command
+
+**Note**: The command name should match your `APP_NAME` environment variable. For example, if you set `APP_NAME=lgtm`, create the command as `/lgtm connect`.
 
 #### Enable Event Subscriptions
 
@@ -130,6 +134,7 @@ vercel env add SLACK_SIGNING_SECRET
 vercel env add SLACK_BOT_TOKEN
 vercel env add SLACK_ALLOWED_CHANNELS
 vercel env add TRIGGER_EMOJI
+vercel env add APP_NAME
 vercel env add GITHUB_CLIENT_ID
 vercel env add GITHUB_CLIENT_SECRET
 vercel env add GITHUB_OWNER
@@ -144,6 +149,7 @@ SLACK_SIGNING_SECRET=abc123...
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_ALLOWED_CHANNELS=C01234567,C07654321
 TRIGGER_EMOJI=white_check_mark
+APP_NAME=lgtm
 GITHUB_CLIENT_ID=Iv1.abc123...
 GITHUB_CLIENT_SECRET=abc123...
 GITHUB_OWNER=your-company
@@ -154,6 +160,7 @@ BASE_URL=your-app.vercel.app
 **Notes:**
 - `SLACK_ALLOWED_CHANNELS`: Comma-separated list of channel IDs (no spaces)
 - `TRIGGER_EMOJI`: The emoji name without colons (default: `white_check_mark` for ✅)
+- `APP_NAME`: Name used for the slash command (e.g., `lgtm` for `/lgtm connect`)
 - `BASE_URL`: Your Vercel app domain without `https://`
 
 ### 7. Deploy to Production
@@ -167,7 +174,7 @@ vercel --prod
 Now that you have your production URL:
 
 1. Go back to your Slack app settings
-2. Update "Slash Commands" > `/connect` > Request URL to: `https://your-app.vercel.app/api/connect`
+2. Update "Slash Commands" > `/<your-app-name> connect` > Request URL to: `https://your-app.vercel.app/api/connect`
 3. Update "Event Subscriptions" > Request URL to: `https://your-app.vercel.app/api/events`
 4. Slack will verify both URLs (should show green checkmarks)
 5. Save changes
@@ -190,7 +197,7 @@ Now that you have your production URL:
 
 Each user needs to connect their GitHub account once:
 
-1. In any Slack channel or DM, type: `/connect`
+1. In any Slack channel or DM, type: `/<app_name> connect` (e.g., `/lgtm connect`)
 2. Click the "Connect GitHub Account" button
 3. Authorize the app on GitHub
 4. You'll see a success message
@@ -210,14 +217,14 @@ Each user needs to connect their GitHub account once:
 
 3. The bot will automatically approve the PR on GitHub using your connected account
 
-**Note**: If you haven't connected your GitHub account, the bot will DM you a reminder to use `/connect`.
+**Note**: If you haven't connected your GitHub account, the bot will DM you a reminder to use `/<app_name> connect`.
 
 ## Development
 
 Run locally with:
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 For local testing with Slack, you'll need to use a tool like [ngrok](https://ngrok.com/) to expose your local server:
@@ -250,11 +257,11 @@ vercel dev
 - Make sure the bot is invited to the channel (`/invite @LGTM Bot`)
 - Verify the channel ID is in `SLACK_ALLOWED_CHANNELS`
 - Check that you're using the correct emoji (default: ✅)
-- Ensure you've connected your GitHub account with `/connect`
+- Ensure you've connected your GitHub account with `/<app_name> connect`
 - Check Vercel function logs: `vercel logs`
 
 ### "You need to connect your GitHub account" message
-- Run `/connect` in Slack
+- Run `/<app_name> connect` in Slack (e.g., `/lgtm connect`)
 - Click the button and authorize the app on GitHub
 - Make sure you complete the OAuth flow
 
@@ -264,7 +271,7 @@ vercel dev
 
 ### GitHub approval fails
 - Your GitHub token might be expired or revoked
-- Try reconnecting with `/connect`
+- Try reconnecting with `/<app_name> connect`
 - Verify the PR exists and is open
 - Ensure you have permission to approve PRs in the repository
 - Check Vercel function logs: `vercel logs`

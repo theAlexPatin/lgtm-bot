@@ -210,10 +210,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const userInfo = await getUserInfo(event.user);
 
       if (!userInfo) {
+        const appName = process.env.APP_NAME || 'lgtm';
         console.log(`User ${event.user} has not connected their GitHub account`);
         await sendDM(
           event.user,
-          '⚠️ You need to connect your GitHub account first! Use `/connect` to link your account.',
+          `⚠️ You need to connect your GitHub account first! Use \`/${appName} connect\` to link your account.`,
           botToken
         );
         return;
@@ -257,9 +258,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Try to notify the user of the error
       try {
+        const appName = process.env.APP_NAME || 'lgtm';
         await sendDM(
           event.user,
-          `❌ Failed to approve PR: ${error.message}. Your GitHub token might be invalid or expired. Try using \`/connect\` again.`,
+          `❌ Failed to approve PR: ${error.message}. Your GitHub token might be invalid or expired. Try using \`/${appName} connect\` again.`,
           botToken
         );
       } catch (dmError) {
