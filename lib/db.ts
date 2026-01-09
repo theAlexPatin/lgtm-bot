@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { createPool } from '@vercel/postgres';
 
 export interface UserToken {
   slack_user_id: string;
@@ -8,11 +8,27 @@ export interface UserToken {
   updated_at: Date;
 }
 
+// Get database pool
+const getPool = () => {
+  // Vercel Prisma uses POSTGRES_PRISMA_URL for pooled connections
+  const connectionString =
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error('No database connection string found. Please set POSTGRES_PRISMA_URL, POSTGRES_URL, or DATABASE_URL.');
+  }
+
+  return createPool({ connectionString });
+};
+
 // Initialize database table
 export async function initializeDatabase() {
+  const db = getPool();
   try {
     console.log('Creating table if not exists...');
-    await sql`
+    await db.sql`
       CREATE TABLE IF NOT EXISTS user_tokens (
         slack_user_id VARCHAR(255) PRIMARY KEY,
         github_token TEXT NOT NULL,
@@ -34,9 +50,10 @@ export async function storeUserToken(
   githubToken: string,
   githubUsername: string
 ): Promise<void> {
+  const db = getPool();
   try {
     console.log(`Storing token for ${slackUserId}...`);
-    await sql`
+    await db.sql`
       INSERT INTO user_tokens (slack_user_id, github_token, github_username, updated_at)
       VALUES (${slackUserId}, ${githubToken}, ${githubUsername}, CURRENT_TIMESTAMP)
       ON CONFLICT (slack_user_id)
@@ -54,8 +71,9 @@ export async function storeUserToken(
 
 // Get user's GitHub token
 export async function getUserToken(slackUserId: string): Promise<string | null> {
+  const db = getPool();
   try {
-    const result = await sql`
+    const result = await db.sql`
       SELECT github_token
       FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
@@ -74,8 +92,9 @@ export async function getUserToken(slackUserId: string): Promise<string | null> 
 
 // Get user's GitHub username
 export async function getUserInfo(slackUserId: string): Promise<{ token: string; username: string } | null> {
+  const db = getPool();
   try {
-    const result = await sql`
+    const result = await db.sql`
       SELECT github_token, github_username
       FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
@@ -97,8 +116,9 @@ export async function getUserInfo(slackUserId: string): Promise<{ token: string;
 
 // Delete user's token (for disconnecting)
 export async function deleteUserToken(slackUserId: string): Promise<void> {
+  const db = getPool();
   try {
-    await sql`
+    await db.sql`
       DELETE FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
     `;
