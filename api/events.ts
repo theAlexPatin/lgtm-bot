@@ -4,8 +4,14 @@ import crypto from 'crypto';
 import { getUserInfo, initializeDatabase } from '../lib/db';
 import { getRawBody, verifySlackRequest } from '../lib/slack';
 
-// Extract all PR numbers from any URLs containing owner/repo/number pattern
-function extractPRNumbers(text: string, owner: string, repo: string): number[] {
+interface PRInfo {
+  owner: string;
+  repo: string;
+  prNumber: number;
+}
+
+// Extract all PR information from any URLs in the text
+function extractPRs(text: string): PRInfo[] {
   // Slack formats links as <URL|text> or just <URL>
   // Extract all URLs from Slack format first
   const slackLinkPattern = /<(https?:\/\/[^|>]+)(?:\|[^>]+)?>/g;
@@ -17,31 +23,37 @@ function extractPRNumbers(text: string, owner: string, repo: string): number[] {
   // Combine both types of URLs
   const allUrls = [...slackLinks, ...plainUrls];
 
-  // Look for URLs containing the specific owner/repo pattern
+  // Look for URLs containing owner/repo/pull patterns
   // This covers:
   // - GitHub: https://github.com/owner/repo/pull/123
   // - Graphite: https://app.graphite.com/github/pr/owner/repo/123
-  // - Any other service with similar pattern
-  const escapedOwner = owner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedRepo = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`\\/${escapedOwner}\\/${escapedRepo}\\/(?:pull\\/)?(\\d+)`, 'i');
+  const githubPattern = /github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i;
+  const graphitePattern = /graphite\.(?:com|dev)\/github\/pr\/([^\/]+)\/([^\/]+)\/(\d+)/i;
 
-  const prNumbers: number[] = [];
-  const seen = new Set<number>();
+  const prs: PRInfo[] = [];
+  const seen = new Set<string>();
 
   for (const url of allUrls) {
-    const prMatch = url.match(pattern);
-    if (prMatch) {
-      const prNumber = parseInt(prMatch[1], 10);
+    let match = url.match(githubPattern);
+    if (!match) {
+      match = url.match(graphitePattern);
+    }
+
+    if (match) {
+      const owner = match[1];
+      const repo = match[2];
+      const prNumber = parseInt(match[3], 10);
+      const key = `${owner}/${repo}/${prNumber}`;
+
       // Avoid duplicates
-      if (!seen.has(prNumber)) {
-        seen.add(prNumber);
-        prNumbers.push(prNumber);
+      if (!seen.has(key)) {
+        seen.add(key);
+        prs.push({ owner, repo, prNumber });
       }
     }
   }
 
-  return prNumbers;
+  return prs;
 }
 
 // Fetch message content from Slack
@@ -126,12 +138,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const signingSecret = process.env.SLACK_SIGNING_SECRET;
   const botToken = process.env.SLACK_BOT_TOKEN;
-  const githubOwner = process.env.GITHUB_OWNER;
-  const githubRepo = process.env.GITHUB_REPO;
   const allowedChannels = process.env.SLACK_ALLOWED_CHANNELS?.split(',') || [];
   const triggerEmoji = process.env.TRIGGER_EMOJI || 'white_check_mark'; // ✅
 
-  if (!signingSecret || !botToken || !githubOwner || !githubRepo) {
+  if (!signingSecret || !botToken) {
     console.error('Missing environment variables');
     return res.status(500).json({ error: 'Server configuration error' });
   }
@@ -258,34 +268,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      // Extract all PR numbers from the message
-      const prNumbers = extractPRNumbers(messageText, githubOwner, githubRepo);
+      // Extract all PR information from the message
+      const prs = extractPRs(messageText);
 
-      if (prNumbers.length === 0) {
+      if (prs.length === 0) {
         console.log('No PR links found in message:', messageText);
         return;
       }
 
-      console.log(`Found ${prNumbers.length} PR(s): ${prNumbers.join(', ')}, approving as ${userInfo.username}...`);
+      const prSummary = prs.map(pr => `${pr.owner}/${pr.repo}#${pr.prNumber}`).join(', ');
+      console.log(`Found ${prs.length} PR(s): ${prSummary}, approving as ${userInfo.username}...`);
 
       // Approve all PRs using the user's token
       const octokit = new Octokit({ auth: userInfo.token });
 
       const approvalResults = [];
-      for (const prNumber of prNumbers) {
+      for (const pr of prs) {
         try {
           await octokit.pulls.createReview({
-            owner: githubOwner,
-            repo: githubRepo,
-            pull_number: prNumber,
+            owner: pr.owner,
+            repo: pr.repo,
+            pull_number: pr.prNumber,
             event: 'APPROVE',
           });
 
-          console.log(`✅ PR #${prNumber} approved by ${userInfo.username} (Slack user: ${event.user})`);
-          approvalResults.push({ prNumber, status: 'success' });
+          console.log(`✅ ${pr.owner}/${pr.repo}#${pr.prNumber} approved by ${userInfo.username} (Slack user: ${event.user})`);
+          approvalResults.push({ pr, status: 'success' });
         } catch (prError: any) {
-          console.error(`Failed to approve PR #${prNumber}:`, prError.message);
-          approvalResults.push({ prNumber, status: 'failed', error: prError.message });
+          console.error(`Failed to approve ${pr.owner}/${pr.repo}#${pr.prNumber}:`, prError.message);
+          approvalResults.push({ pr, status: 'failed', error: prError.message });
         }
       }
 
