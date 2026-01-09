@@ -1,33 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import crypto from 'crypto';
 import { Octokit } from '@octokit/rest';
 import { getUserInfo, initializeDatabase } from '../lib/db';
-
-// Verify Slack request signature
-function verifySlackRequest(
-  body: string,
-  timestamp: string,
-  signature: string,
-  signingSecret: string
-): boolean {
-  const time = Math.floor(Date.now() / 1000);
-
-  // Request is too old (replay attack prevention)
-  if (Math.abs(time - parseInt(timestamp)) > 300) {
-    return false;
-  }
-
-  const sigBasestring = `v0:${timestamp}:${body}`;
-  const mySignature = `v0=${crypto
-    .createHmac('sha256', signingSecret)
-    .update(sigBasestring)
-    .digest('hex')}`;
-
-  return crypto.timingSafeEqual(
-    Buffer.from(mySignature),
-    Buffer.from(signature)
-  );
-}
+import { getRawBody, verifySlackRequest } from '../lib/slack';
 
 // Extract PR number from GitHub URL
 function extractGitHubPRNumber(url: string): number | null {
@@ -161,13 +135,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Get raw body for signature verification
-  const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  const rawBody = await getRawBody(req);
   const timestamp = req.headers['x-slack-request-timestamp'] as string;
   const signature = req.headers['x-slack-signature'] as string;
+
+  if (!timestamp || !signature) {
+    console.error('Missing Slack headers');
+    return res.status(401).json({ error: 'Missing Slack headers' });
+  }
 
   // Verify request is from Slack
   if (!verifySlackRequest(rawBody, timestamp, signature, signingSecret)) {
     console.error('Invalid Slack signature');
+    console.error('Raw body length:', rawBody.length);
+    console.error('Timestamp:', timestamp);
+    console.error('Signature:', signature);
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
