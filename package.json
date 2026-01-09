@@ -1,0 +1,26 @@
+{
+  "name": "lgtm-bot",
+  "version": "1.0.0",
+  "description": "Slack bot for approving GitHub PRs with /lgtm command",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch api/lgtm.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["slack", "github", "bot", "lgtm"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/rest": "^20.0.2",
+    "@slack/bolt": "^3.17.0",
+    "@vercel/postgres": "^0.5.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
