@@ -164,13 +164,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (body.type === 'event_callback') {
     const event = body.event;
 
+    console.log('Received event:', JSON.stringify(event, null, 2));
+
     // Only process reaction_added events
     if (event.type !== 'reaction_added') {
+      console.log(`Ignoring event type: ${event.type}`);
       return res.status(200).json({ ok: true });
     }
 
     // Check if it's the trigger emoji
+    console.log(`Reaction: ${event.reaction}, Looking for: ${triggerEmoji}`);
     if (event.reaction !== triggerEmoji) {
+      console.log(`Ignoring reaction ${event.reaction} - not the trigger emoji`);
       return res.status(200).json({ ok: true });
     }
 
@@ -180,10 +185,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ok: true });
     }
 
-    // Respond immediately to Slack
-    res.status(200).json({ ok: true });
+    console.log(`✅ Received ${triggerEmoji} reaction from user ${event.user} in channel ${event.item.channel}`);
 
-    // Process the reaction in the background
+    // Process the reaction synchronously
     try {
       // Initialize database
       await initializeDatabase();
@@ -235,8 +239,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       console.log(`✅ PR #${prNumber} approved by ${userInfo.username} (Slack user: ${event.user})`);
+
+      // Send success response
+      return res.status(200).json({ ok: true });
     } catch (error: any) {
       console.error('Failed to approve PR:', error.message);
+      console.error('Error stack:', error.stack);
 
       // Try to notify the user of the error
       try {
@@ -249,6 +257,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (dmError) {
         console.error('Failed to send error DM:', dmError);
       }
+
+      // Send response even on error
+      return res.status(200).json({ ok: true });
     }
   }
+
+  // Default response for other event types
+  return res.status(200).json({ ok: true });
 }
