@@ -1,25 +1,4 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/**/*.ts",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/events",
-      "dest": "/api/events.ts"
-    },
-    {
-      "src": "/api/connect",
-      "dest": "/api/connect.ts"
-    },
-    {
-      "src": "/api/oauth/callback",
-      "dest": "/api/oauth/callback.ts"
-    }
-  ],
   "functions": {
     "api/**/*.ts": {
       "includeFiles": "lib/**"
