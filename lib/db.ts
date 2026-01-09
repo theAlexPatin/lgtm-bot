@@ -1,4 +1,4 @@
-import { createPool } from '@vercel/postgres';
+import { db } from '@vercel/postgres';
 
 export interface UserToken {
   slack_user_id: string;
@@ -8,27 +8,11 @@ export interface UserToken {
   updated_at: Date;
 }
 
-// Get database pool
-const getPool = () => {
-  // Vercel Prisma uses POSTGRES_PRISMA_URL for pooled connections
-  const connectionString =
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error('No database connection string found. Please set POSTGRES_PRISMA_URL, POSTGRES_URL, or DATABASE_URL.');
-  }
-
-  return createPool({ connectionString });
-};
-
 // Initialize database table
 export async function initializeDatabase() {
-  const db = getPool();
   try {
     console.log('Creating table if not exists...');
-    await db.sql`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS user_tokens (
         slack_user_id VARCHAR(255) PRIMARY KEY,
         github_token TEXT NOT NULL,
@@ -36,7 +20,7 @@ export async function initializeDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `;
+    `);
     console.log('Database table ready');
   } catch (error: any) {
     console.error('Failed to initialize database:', error.message);
@@ -50,18 +34,18 @@ export async function storeUserToken(
   githubToken: string,
   githubUsername: string
 ): Promise<void> {
-  const db = getPool();
   try {
     console.log(`Storing token for ${slackUserId}...`);
-    await db.sql`
-      INSERT INTO user_tokens (slack_user_id, github_token, github_username, updated_at)
-      VALUES (${slackUserId}, ${githubToken}, ${githubUsername}, CURRENT_TIMESTAMP)
-      ON CONFLICT (slack_user_id)
-      DO UPDATE SET
-        github_token = ${githubToken},
-        github_username = ${githubUsername},
-        updated_at = CURRENT_TIMESTAMP
-    `;
+    await db.query(
+      `INSERT INTO user_tokens (slack_user_id, github_token, github_username, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (slack_user_id)
+       DO UPDATE SET
+         github_token = $2,
+         github_username = $3,
+         updated_at = CURRENT_TIMESTAMP`,
+      [slackUserId, githubToken, githubUsername]
+    );
     console.log(`Token stored for ${slackUserId}`);
   } catch (error: any) {
     console.error('Failed to store user token:', error.message);
@@ -71,13 +55,11 @@ export async function storeUserToken(
 
 // Get user's GitHub token
 export async function getUserToken(slackUserId: string): Promise<string | null> {
-  const db = getPool();
   try {
-    const result = await db.sql`
-      SELECT github_token
-      FROM user_tokens
-      WHERE slack_user_id = ${slackUserId}
-    `;
+    const result = await db.query(
+      'SELECT github_token FROM user_tokens WHERE slack_user_id = $1',
+      [slackUserId]
+    );
 
     if (result.rows.length === 0) {
       return null;
@@ -92,13 +74,11 @@ export async function getUserToken(slackUserId: string): Promise<string | null> 
 
 // Get user's GitHub username
 export async function getUserInfo(slackUserId: string): Promise<{ token: string; username: string } | null> {
-  const db = getPool();
   try {
-    const result = await db.sql`
-      SELECT github_token, github_username
-      FROM user_tokens
-      WHERE slack_user_id = ${slackUserId}
-    `;
+    const result = await db.query(
+      'SELECT github_token, github_username FROM user_tokens WHERE slack_user_id = $1',
+      [slackUserId]
+    );
 
     if (result.rows.length === 0) {
       return null;
@@ -116,12 +96,11 @@ export async function getUserInfo(slackUserId: string): Promise<{ token: string;
 
 // Delete user's token (for disconnecting)
 export async function deleteUserToken(slackUserId: string): Promise<void> {
-  const db = getPool();
   try {
-    await db.sql`
-      DELETE FROM user_tokens
-      WHERE slack_user_id = ${slackUserId}
-    `;
+    await db.query(
+      'DELETE FROM user_tokens WHERE slack_user_id = $1',
+      [slackUserId]
+    );
   } catch (error: any) {
     console.error('Failed to delete user token:', error.message);
     throw error;
