@@ -22,11 +22,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    console.log('Starting OAuth callback...');
+
     // Decode state to get Slack user ID
     const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
     const slackUserId = stateData.slack_user_id;
+    console.log('Slack user ID:', slackUserId);
 
     // Exchange code for access token
+    console.log('Exchanging code for token...');
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
@@ -41,21 +45,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const tokenData = await tokenResponse.json() as any;
+    console.log('Token response received');
 
     if (tokenData.error || !tokenData.access_token) {
-      console.error('GitHub OAuth error:', tokenData.error_description);
-      return res.status(400).send('Failed to authenticate with GitHub');
+      console.error('GitHub OAuth error:', tokenData.error_description || tokenData.error);
+      return res.status(400).send(`Failed to authenticate with GitHub: ${tokenData.error_description || tokenData.error}`);
     }
 
     const accessToken = tokenData.access_token;
+    console.log('Access token obtained');
 
     // Get GitHub username
+    console.log('Fetching GitHub user info...');
     const octokit = new Octokit({ auth: accessToken });
     const { data: user } = await octokit.users.getAuthenticated();
+    console.log('GitHub username:', user.login);
 
     // Initialize database and store token
+    console.log('Initializing database...');
     await initializeDatabase();
+    console.log('Storing user token...');
     await storeUserToken(slackUserId, accessToken, user.login);
+    console.log('Token stored successfully');
 
     // Return success page
     return res.status(200).send(`
@@ -123,7 +134,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       </html>
     `);
   } catch (error: any) {
-    console.error('OAuth callback error:', error.message);
-    return res.status(500).send('An error occurred during authentication');
+    console.error('OAuth callback error:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    return res.status(500).send(`An error occurred during authentication: ${error.message}`);
   }
 }
