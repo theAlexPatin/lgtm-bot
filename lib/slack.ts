@@ -7,14 +7,23 @@ export async function getRawBody(req: VercelRequest): Promise<string> {
     return req.body;
   }
 
-  // If body is already parsed, try to reconstruct it
+  // If body is already parsed as JSON object, convert back to JSON string
   if (req.body && typeof req.body === 'object') {
-    // For form-urlencoded data from Slack
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(req.body)) {
-      params.append(key, String(value));
+    // Check content type to determine how to reconstruct
+    const contentType = req.headers['content-type'] || '';
+
+    if (contentType.includes('application/json')) {
+      // For JSON requests, stringify the object
+      // Note: This might not match the exact original formatting
+      return JSON.stringify(req.body);
+    } else {
+      // For form-urlencoded data from Slack
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(req.body)) {
+        params.append(key, String(value));
+      }
+      return params.toString();
     }
-    return params.toString();
   }
 
   return '';

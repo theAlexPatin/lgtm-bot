@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { Octokit } from '@octokit/rest';
+import crypto from 'crypto';
 import { getUserInfo, initializeDatabase } from '../lib/db';
 import { getRawBody, verifySlackRequest } from '../lib/slack';
 
@@ -159,12 +160,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Handle URL verification challenge BEFORE signature verification
-  // Slack's challenge doesn't always include proper signatures
+  // Slack's challenge request is sent during initial setup and may not have proper signature
   if (body.type === 'url_verification') {
     console.log('Responding to URL verification challenge');
     return res.status(200).json({ challenge: body.challenge });
   }
 
+  // For actual events, verify the signature
   const timestamp = req.headers['x-slack-request-timestamp'] as string;
   const signature = req.headers['x-slack-signature'] as string;
 
@@ -174,12 +176,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Verify request is from Slack
-  if (!verifySlackRequest(rawBody, timestamp, signature, signingSecret)) {
-    console.error('Invalid Slack signature');
+  // Note: Signature verification may fail because Vercel parses the body and we can't reconstruct it exactly
+  const skipVerification = process.env.SKIP_SLACK_VERIFICATION === 'true';
+
+  if (!skipVerification && !verifySlackRequest(rawBody, timestamp, signature, signingSecret)) {
+    console.error('Invalid Slack signature - body reconstruction may not match original');
+    console.error('Raw body (first 200 chars):', rawBody.substring(0, 200));
     console.error('Raw body length:', rawBody.length);
     console.error('Timestamp:', timestamp);
-    console.error('Signature:', signature);
+    console.error('Signature received:', signature);
+    console.error('Content-Type:', req.headers['content-type']);
+
+    // Log what we're verifying against
+    const sigBasestring = `v0:${timestamp}:${rawBody}`;
+    const expectedSig = `v0=${crypto.createHmac('sha256', signingSecret).update(sigBasestring, 'utf8').digest('hex')}`;
+    console.error('Expected signature:', expectedSig);
+
     return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  if (skipVerification) {
+    console.warn('⚠️  Slack signature verification is DISABLED - only use this in development!');
   }
 
   // Handle events
