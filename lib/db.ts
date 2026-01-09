@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { createPool } from '@vercel/postgres';
 
 export interface UserToken {
   slack_user_id: string;
@@ -8,9 +8,15 @@ export interface UserToken {
   updated_at: Date;
 }
 
+// Create a pooled connection
+const pool = createPool({
+  connectionString: process.env.POSTGRES_URL,
+});
+
 // Initialize database table
 export async function initializeDatabase() {
   try {
+    const sql = await pool.sql;
     await sql`
       CREATE TABLE IF NOT EXISTS user_tokens (
         slack_user_id VARCHAR(255) PRIMARY KEY,
@@ -34,6 +40,7 @@ export async function storeUserToken(
   githubUsername: string
 ): Promise<void> {
   try {
+    const sql = await pool.sql;
     await sql`
       INSERT INTO user_tokens (slack_user_id, github_token, github_username, updated_at)
       VALUES (${slackUserId}, ${githubToken}, ${githubUsername}, CURRENT_TIMESTAMP)
@@ -52,6 +59,7 @@ export async function storeUserToken(
 // Get user's GitHub token
 export async function getUserToken(slackUserId: string): Promise<string | null> {
   try {
+    const sql = await pool.sql;
     const result = await sql`
       SELECT github_token
       FROM user_tokens
@@ -72,6 +80,7 @@ export async function getUserToken(slackUserId: string): Promise<string | null> 
 // Get user's GitHub username
 export async function getUserInfo(slackUserId: string): Promise<{ token: string; username: string } | null> {
   try {
+    const sql = await pool.sql;
     const result = await sql`
       SELECT github_token, github_username
       FROM user_tokens
@@ -95,6 +104,7 @@ export async function getUserInfo(slackUserId: string): Promise<{ token: string;
 // Delete user's token (for disconnecting)
 export async function deleteUserToken(slackUserId: string): Promise<void> {
   try {
+    const sql = await pool.sql;
     await sql`
       DELETE FROM user_tokens
       WHERE slack_user_id = ${slackUserId}
