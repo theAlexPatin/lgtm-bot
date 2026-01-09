@@ -9,7 +9,19 @@ export interface UserToken {
 }
 
 // Create client - this uses the non-pooled connection
-const getClient = () => createClient();
+// Try different connection string env vars in order of preference
+const getClient = () => {
+  const connectionString =
+    process.env.POSTGRES_URL_NON_POOLING ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error('No database connection string found. Please set POSTGRES_URL or DATABASE_URL environment variable.');
+  }
+
+  return createClient({ connectionString });
+};
 
 // Initialize database table
 export async function initializeDatabase() {
