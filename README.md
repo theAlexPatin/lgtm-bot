@@ -152,8 +152,6 @@ TRIGGER_EMOJI=white_check_mark
 APP_NAME=lgtm
 GITHUB_CLIENT_ID=Iv1.abc123...
 GITHUB_CLIENT_SECRET=abc123...
-GITHUB_OWNER=your-company
-GITHUB_REPO=your-repo
 BASE_URL=your-app.vercel.app
 ```
 
