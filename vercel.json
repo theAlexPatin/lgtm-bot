@@ -2,9 +2,6 @@
   "functions": {
     "api/**/*.ts": {
       "includeFiles": "lib/**"
-    },
-    "api/oauth/**/*.ts": {
-      "includeFiles": "lib/**"
     }
   }
 }
