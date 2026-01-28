@@ -3,13 +3,21 @@ import { Octokit } from '@octokit/rest';
 import { storeUserToken, initializeDatabase } from '../lib/db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('=== OAUTH CALLBACK HANDLER START ===');
+  console.log(`[${new Date().toISOString()}] Received ${req.method} request`);
+
   if (req.method !== 'GET') {
+    console.log('❌ Rejecting non-GET request');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const { code, state } = req.query;
+  console.log('📋 Request parameters received');
+  console.log(`Code: ${code ? '✓ present' : '❌ missing'}`);
+  console.log(`State: ${state ? '✓ present' : '❌ missing'}`);
 
   if (!code || !state) {
+    console.error('❌ Missing code or state parameter');
     return res.status(400).send('Missing code or state parameter');
   }
 
@@ -17,20 +25,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const githubClientSecret = process.env.GITHUB_CLIENT_SECRET;
 
   if (!githubClientId || !githubClientSecret) {
-    console.error('Missing GitHub OAuth credentials');
+    console.error('❌ Missing GitHub OAuth credentials');
     return res.status(500).send('Server configuration error');
   }
 
+  console.log('✓ Environment variables loaded');
+
   try {
-    console.log('Starting OAuth callback...');
+    console.log('🚀 Starting OAuth callback flow...');
 
     // Decode state to get Slack user ID
+    console.log('🔓 Decoding state parameter...');
     const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
     const slackUserId = stateData.slack_user_id;
-    console.log('Slack user ID:', slackUserId);
+    console.log(`✓ Slack user ID: ${slackUserId}`);
 
     // Exchange code for access token
-    console.log('Exchanging code for token...');
+    console.log('🔄 Exchanging authorization code for access token...');
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
@@ -45,31 +56,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const tokenData = await tokenResponse.json() as any;
-    console.log('Token response received');
+    console.log('✓ Token response received from GitHub');
 
     if (tokenData.error || !tokenData.access_token) {
-      console.error('GitHub OAuth error:', tokenData.error_description || tokenData.error);
+      console.error('❌ GitHub OAuth error:', tokenData.error_description || tokenData.error);
       return res.status(400).send(`Failed to authenticate with GitHub: ${tokenData.error_description || tokenData.error}`);
     }
 
     const accessToken = tokenData.access_token;
-    console.log('Access token obtained');
+    console.log('✅ Access token obtained successfully');
 
     // Get GitHub username
-    console.log('Fetching GitHub user info...');
+    console.log('👤 Fetching GitHub user info...');
     const octokit = new Octokit({ auth: accessToken });
     const { data: user } = await octokit.users.getAuthenticated();
-    console.log('GitHub username:', user.login);
+    console.log(`✓ GitHub username: @${user.login}`);
 
     // Initialize database and store token
-    console.log('Initializing database...');
+    console.log('💾 Initializing database...');
     await initializeDatabase();
-    console.log('Database initialized, storing user token...');
+    console.log('✓ Database initialized');
+    console.log('💾 Storing user token...');
     await storeUserToken(slackUserId, accessToken, user.login);
     console.log(`✅ Successfully linked GitHub account @${user.login} to Slack user ${slackUserId}`);
 
     // Return success page
-    console.log('Sending success response...');
+    console.log('📤 Sending success response...');
     const html = `
       <!DOCTYPE html>
       <html>
@@ -136,12 +148,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `;
 
     res.status(200).send(html);
-    console.log('Success response sent');
+    console.log('✅ Success response sent');
+    console.log('=== OAUTH CALLBACK HANDLER COMPLETE ===\n');
     return;
   } catch (error: any) {
-    console.error('OAuth callback error:', error);
+    console.error('❌ OAuth callback error:', error);
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
+    console.log('=== OAUTH CALLBACK HANDLER COMPLETE (with error) ===\n');
     return res.status(500).send(`An error occurred during authentication: ${error.message}`);
   }
 }

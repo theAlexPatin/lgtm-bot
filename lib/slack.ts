@@ -36,11 +36,15 @@ export function verifySlackRequest(
   signature: string,
   signingSecret: string
 ): boolean {
+  console.log('[verifySlackRequest] Verifying Slack request signature...');
   const time = Math.floor(Date.now() / 1000);
+  const requestAge = Math.abs(time - parseInt(timestamp));
+
+  console.log(`[verifySlackRequest] Request age: ${requestAge} seconds`);
 
   // Request is too old (replay attack prevention)
-  if (Math.abs(time - parseInt(timestamp)) > 300) {
-    console.error('Request timestamp too old');
+  if (requestAge > 300) {
+    console.error(`[verifySlackRequest] ❌ Request timestamp too old (${requestAge}s > 300s)`);
     return false;
   }
 
@@ -50,13 +54,24 @@ export function verifySlackRequest(
     .update(sigBasestring, 'utf8')
     .digest('hex')}`;
 
+  console.log(`[verifySlackRequest] Expected signature: ${mySignature.substring(0, 20)}...`);
+  console.log(`[verifySlackRequest] Received signature: ${signature.substring(0, 20)}...`);
+
   try {
-    return crypto.timingSafeEqual(
+    const isValid = crypto.timingSafeEqual(
       Buffer.from(mySignature, 'utf8'),
       Buffer.from(signature, 'utf8')
     );
+
+    if (isValid) {
+      console.log('[verifySlackRequest] ✅ Signature verified successfully');
+    } else {
+      console.error('[verifySlackRequest] ❌ Signature mismatch');
+    }
+
+    return isValid;
   } catch (error) {
-    console.error('Signature comparison failed:', error);
+    console.error('[verifySlackRequest] ❌ Signature comparison failed:', error);
     return false;
   }
 }
