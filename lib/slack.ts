@@ -3,30 +3,24 @@ import crypto from 'crypto';
 
 // Get raw body from Vercel request
 export async function getRawBody(req: VercelRequest): Promise<string> {
+  // If body is already a string, return it
   if (typeof req.body === 'string') {
     return req.body;
   }
 
-  // If body is already parsed as JSON object, convert back to JSON string
-  if (req.body && typeof req.body === 'object') {
-    // Check content type to determine how to reconstruct
-    const contentType = req.headers['content-type'] || '';
-
-    if (contentType.includes('application/json')) {
-      // For JSON requests, stringify the object
-      // Note: This might not match the exact original formatting
-      return JSON.stringify(req.body);
-    } else {
-      // For form-urlencoded data from Slack
-      const params = new URLSearchParams();
-      for (const [key, value] of Object.entries(req.body)) {
-        params.append(key, String(value));
-      }
-      return params.toString();
-    }
-  }
-
-  return '';
+  // Read from the request stream if body parsing is disabled
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk.toString();
+    });
+    req.on('end', () => {
+      resolve(data);
+    });
+    req.on('error', (err) => {
+      reject(err);
+    });
+  });
 }
 
 // Verify Slack request signature

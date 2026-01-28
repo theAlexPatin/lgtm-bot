@@ -4,6 +4,13 @@ import crypto from 'crypto';
 import { getUserInfo, initializeDatabase } from '../lib/db';
 import { getRawBody, verifySlackRequest } from '../lib/slack';
 
+// Disable body parsing so we can access the raw body for signature verification
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 interface PRInfo {
   owner: string;
   repo: string;

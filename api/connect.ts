@@ -1,6 +1,13 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getRawBody, verifySlackRequest, parseBody } from '../lib/slack';
 
+// Disable body parsing so we can access the raw body for signature verification
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('=== CONNECT HANDLER START ===');
   console.log(`[${new Date().toISOString()}] Received ${req.method} request`);
